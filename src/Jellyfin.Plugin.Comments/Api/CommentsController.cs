@@ -17,7 +17,7 @@ namespace Jellyfin.Plugin.Comments.Api;
 /// Controller for handling comment-related API requests.
 /// </summary>
 [ApiController] // Signalisiert .NET, dass diese Klasse API-Routen bereitstellt
-[Authorize]     // Sichert die API ab: Nur eingeloggte Jellyfin-Nutzer dürfen hierauf zugreifen!
+[Authorize(Policy = "DefaultAuthorization")]     // Sichert die API ab: Nur eingeloggte Jellyfin-Nutzer dürfen hierauf zugreifen!
 [Produces("application/json")] // Wir senden immer JSON zurück
 public class CommentsController : ControllerBase
 {
@@ -180,9 +180,14 @@ public class CommentsController : ControllerBase
     /// Hilfsmethode, um die User-ID des Nutzers auszulesen, der den HTTP-Request gesendet hat.
     /// Jellyfin setzt diese Info (Claims) automatisch anhand des Access-Tokens (Header).
     /// </summary>
+
     private Guid GetCurrentUserId()
     {
-        var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(userIdString, out var userId) ? userId : Guid.Empty;
+        var val = User.Claims.FirstOrDefault(c => 
+            c.Type == ClaimTypes.NameIdentifier || 
+            c.Type == "UserId" || 
+            c.Type.EndsWith("nameidentifier", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        return Guid.TryParse(val, out var userId) ? userId : Guid.Empty;
     }
 }
