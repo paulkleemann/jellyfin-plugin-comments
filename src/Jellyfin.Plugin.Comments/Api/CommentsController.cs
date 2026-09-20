@@ -183,11 +183,41 @@ public class CommentsController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var val = User.Claims.FirstOrDefault(c => 
+        // 1. Versuch: Über Claims (NameIdentifier / UserId)
+        var claimValue = User.Claims.FirstOrDefault(c => 
             c.Type == ClaimTypes.NameIdentifier || 
             c.Type == "UserId" || 
+            c.Type.EndsWith("userid", StringComparison.OrdinalIgnoreCase) ||
             c.Type.EndsWith("nameidentifier", StringComparison.OrdinalIgnoreCase))?.Value;
 
-        return Guid.TryParse(val, out var userId) ? userId : Guid.Empty;
+        if (!string.IsNullOrEmpty(claimValue) && Guid.TryParse(claimValue, out var userIdFromClaim))
+        {
+            return userIdFromClaim;
+        }
+
+        // 2. Versuch: Benutzername aus User.Identity auslesen und per UserManager auflösen
+        if (!string.IsNullOrEmpty(User.Identity?.Name))
+        {
+            var user = _userManager.GetUserByName(User.Identity.Name);
+            if (user != null)
+            {
+                return user.Id;
+            }
+        }
+
+        // 3. Fallback: Alle Claims prüfen, ob einer einer gültigen User-ID in Jellyfin entspricht
+        foreach (var claim in User.Claims)
+        {
+            if (Guid.TryParse(claim.Value, out var parsedId))
+            {
+                var user = _userManager.GetUserById(parsedId);
+                if (user != null)
+                {
+                    return user.Id;
+                }
+            }
+        }
+
+        return Guid.Empty;
     }
 }

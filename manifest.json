@@ -8,12 +8,12 @@
       "category": "General",
       "versions": [
         {
-          "version": "0.1.1.0",
-          "changelog": "Fix authorization policy for Jellyfin API.",
+          "version": "0.1.2.0",
+          "changelog": "Fix user ID resolution for comment creation.",
           "targetAbi": "10.11.7.0",
-          "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/blob/main/manifest.json",
-          "checksum": "82a396a00f74ed4edb035f274ed88498",
-          "timestamp": "2026-09-20T22:35:00Z"
+          "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.2.0/Jellyfin.Plugin.Comments_v0.1.2.0.zip",
+          "checksum": "e0ddc493b8e47aafd5202d4605522c9e",
+          "timestamp": "2026-09-20T23:10:00Z"
         }
       ]
     }
