@@ -57,7 +57,7 @@ public class CommentsController : ControllerBase
             ItemId = c.ItemId,
             UserId = c.UserId,
             // Hier holen wir den aktuellen Namen des Nutzers. Falls der Nutzer gelöscht wurde, zeigen wir "Unknown User"
-            UserName = _userManager.GetUserById(c.UserId)?.Name ?? "Unknown User",
+            UserName = _userManager.GetUserById(c.UserId)?.Username ?? "Unknown User",
             ParentCommentId = c.ParentCommentId,
             Text = c.Text,
             CreatedAt = c.CreatedAt,
@@ -136,7 +136,7 @@ public class CommentsController : ControllerBase
             Id = newComment.Id,
             ItemId = newComment.ItemId,
             UserId = newComment.UserId,
-            UserName = _userManager.GetUserById(userId)?.Name ?? "Unknown User",
+            UserName = _userManager.GetUserById(userId)?.Username ?? "Unknown User",
             ParentCommentId = newComment.ParentCommentId,
             Text = newComment.Text,
             CreatedAt = newComment.CreatedAt,
