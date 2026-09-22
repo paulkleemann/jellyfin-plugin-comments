@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.Comments.Data;
 using Jellyfin.Plugin.Comments.Models;
 using MediaBrowser.Controller.Library;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +16,7 @@ namespace Jellyfin.Plugin.Comments.Api;
 /// Controller for handling comment-related API requests.
 /// </summary>
 [ApiController] // Signalisiert .NET, dass diese Klasse API-Routen bereitstellt
-[Authorize(Policy = "DefaultAuthorization")]     // Sichert die API ab: Nur eingeloggte Jellyfin-Nutzer dürfen hierauf zugreifen!
+ 
 [Produces("application/json")] // Wir senden immer JSON zurück
 public class CommentsController : ControllerBase
 {

@@ -12,7 +12,7 @@
           "changelog": "Fix user ID resolution for comment creation.",
           "targetAbi": "10.11.7.0",
           "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.2.0/Jellyfin.Plugin.Comments_v0.1.2.0.zip",
-          "checksum": "e0ddc493b8e47aafd5202d4605522c9e",
+          "checksum": "ff5b78c169bee4f07970b4984275abb0",
           "timestamp": "2026-09-20T23:10:00Z"
         }
       ]
