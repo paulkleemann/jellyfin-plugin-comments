@@ -1,6 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.Comments.Data;
@@ -11,7 +14,7 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.Comments;
 
 /// <summary>
-/// Hosted service that runs on Jellyfin startup to initialize DB, setup template UI files on disk, and auto-inject into index.html.
+/// Hosted service that initializes the DB, sets up UI templates, and registers web transformations.
 /// </summary>
 public class PluginEntryPoint : IHostedService
 {
@@ -19,9 +22,6 @@ public class PluginEntryPoint : IHostedService
     private readonly IApplicationPaths _applicationPaths;
     private readonly ILogger<PluginEntryPoint> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="PluginEntryPoint"/> class.
-    /// </summary>
     public PluginEntryPoint(
         ICommentRepository commentRepository, 
         IApplicationPaths applicationPaths, 
@@ -47,11 +47,129 @@ public class PluginEntryPoint : IHostedService
             _logger.LogError(ex, "Error initializing Comments plugin database.");
         }
 
-        // 1. Erstelle den Ordner config/comments-ui mit Standard-Dateien, falls noch nicht vorhanden
+        // 1. Template-Dateien (comments.js und comments.css) im config/comments-ui Ordner bereitstellen
         SetupFrontendFiles();
 
-        // 2. Trage die Links automatisch in die index.html von Jellyfin ein
-        InjectClientScript();
+        // 2. Sauber im Arbeitsspeicher bei File Transformation registrieren
+        RegisterWithFileTransformation();
+    }
+
+    /// <summary>
+    /// Callback-Methode: Wird von File Transformation aufgerufen, sobald ein Client index.html anfordert.
+    /// Modifiziert die HTML-Antwort direkt im RAM.
+    /// </summary>
+    public static string TransformIndexHtml(object payload)
+    {
+        string contents = string.Empty;
+
+        if (payload != null)
+        {
+            // 1. Versuch: JObject-Indexer ["contents"]
+            var indexer = payload.GetType().GetProperty("Item", new[] { typeof(string) });
+            if (indexer != null)
+            {
+                var token = indexer.GetValue(payload, new object[] { "contents" });
+                contents = token?.ToString() ?? string.Empty;
+            }
+
+            // 2. Versuch: POCO-Property
+            if (string.IsNullOrEmpty(contents))
+            {
+                var prop = payload.GetType().GetProperty("contents", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (prop != null)
+                {
+                    contents = prop.GetValue(payload)?.ToString() ?? string.Empty;
+                }
+            }
+
+            // 3. Versuch: JSON-Fallback
+            if (string.IsNullOrEmpty(contents))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(payload.ToString()!);
+                    if (doc.RootElement.TryGetProperty("contents", out var cProp))
+                    {
+                        contents = cProp.GetString() ?? string.Empty;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (string.IsNullOrEmpty(contents)) return string.Empty;
+
+        // Falls die Tags schon drin sind, nicht doppelt einfügen
+        if (contents.Contains("Comments/ClientScript.js", StringComparison.OrdinalIgnoreCase))
+        {
+            return contents;
+        }
+
+        const string tags = """
+            <link rel="stylesheet" href="../Comments/Styles.css">
+            <script src="../Comments/ClientScript.js" defer></script>
+            """;
+
+        return contents.Replace("</body>", $"{tags}\n</body>", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RegisterWithFileTransformation()
+    {
+        try
+        {
+            // FileTransformation Assembly im Speicher suchen
+            var fileTransformationAssembly = AssemblyLoadContext.All
+                .SelectMany(x => x.Assemblies)
+                .FirstOrDefault(x => x.FullName?.Contains("FileTransformation") ?? false);
+
+            if (fileTransformationAssembly == null)
+            {
+                _logger.LogWarning("File Transformation Plugin nicht gefunden. Überspringe Registrierung.");
+                return;
+            }
+
+            var pluginInterfaceType = fileTransformationAssembly.GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
+            var registerMethod = pluginInterfaceType?.GetMethod("RegisterTransformation");
+
+            if (registerMethod == null)
+            {
+                _logger.LogWarning("PluginInterface.RegisterTransformation Methode nicht gefunden.");
+                return;
+            }
+
+            // Registrierungsdaten
+            var registrationData = new
+            {
+                id = Plugin.PluginGuid,
+                fileNamePattern = "index\\.html",
+                callbackAssembly = typeof(PluginEntryPoint).Assembly.FullName,
+                callbackClass = typeof(PluginEntryPoint).FullName,
+                callbackMethod = nameof(TransformIndexHtml)
+            };
+
+            var jsonString = JsonSerializer.Serialize(registrationData);
+
+            // FileTransformation erwartet ein Newtonsoft JObject
+            var jObjectType = fileTransformationAssembly.GetType("Newtonsoft.Json.Linq.JObject")
+                           ?? Type.GetType("Newtonsoft.Json.Linq.JObject, Newtonsoft.Json")
+                           ?? AssemblyLoadContext.All.SelectMany(x => x.Assemblies)
+                                .Select(a => a.GetType("Newtonsoft.Json.Linq.JObject"))
+                                .FirstOrDefault(t => t != null);
+
+            object? payloadToSend = jsonString;
+            if (jObjectType != null)
+            {
+                var parseMethod = jObjectType.GetMethod("Parse", new[] { typeof(string) });
+                payloadToSend = parseMethod?.Invoke(null, new object[] { jsonString });
+            }
+
+            registerMethod.Invoke(null, new object?[] { payloadToSend });
+            _logger.LogInformation("🍿 Comments Plugin erfolgreich bei File Transformation registriert!");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex.InnerException ?? ex, "Fehler beim Registrieren bei File Transformation.");
+        }
     }
 
     private void SetupFrontendFiles()
@@ -64,7 +182,6 @@ public class PluginEntryPoint : IHostedService
             var jsPath = Path.Combine(uiDir, "comments.js");
             var cssPath = Path.Combine(uiDir, "comments.css");
 
-            // Falls comments.css noch nicht existiert -> Vorlage erstellen
             if (!File.Exists(cssPath))
             {
                 const string defaultCss = """
@@ -130,7 +247,6 @@ public class PluginEntryPoint : IHostedService
                 _logger.LogInformation("Created template comments.css in {Path}", cssPath);
             }
 
-            // Falls comments.js noch nicht existiert -> Vorlage erstellen
             if (!File.Exists(jsPath))
             {
                 const string defaultJs = """
@@ -307,56 +423,6 @@ public class PluginEntryPoint : IHostedService
         }
     }
 
-    private void InjectClientScript()
-    {
-        try
-        {
-            var possiblePaths = new List<string?>
-            {
-                _applicationPaths.WebPath,
-                "/usr/share/jellyfin/web",
-                "/jellyfin/jellyfin-web",
-                Path.Combine(AppContext.BaseDirectory, "jellyfin-web")
-            };
-
-            const string tags = """
-                <link rel="stylesheet" href="Comments/Styles.css">
-                <script src="Comments/ClientScript.js" defer></script>
-                """;
-
-            foreach (var dir in possiblePaths)
-            {
-                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) continue;
-
-                var indexPath = Path.Combine(dir, "index.html");
-                if (!File.Exists(indexPath)) continue;
-
-                var indexContent = File.ReadAllText(indexPath);
-
-                if (!indexContent.Contains("Comments/ClientScript.js", StringComparison.OrdinalIgnoreCase))
-                {
-                    _logger.LogInformation("Injecting Comments tags into {IndexPath}...", indexPath);
-                    var newContent = indexContent.Replace("</body>", $"{tags}\n</body>", StringComparison.OrdinalIgnoreCase);
-                    File.WriteAllText(indexPath, newContent);
-                    _logger.LogInformation("Comments script & css successfully injected into index.html!");
-                }
-                else
-                {
-                    _logger.LogInformation("Comments tags already present in {IndexPath}.", indexPath);
-                }
-
-                break;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to auto-inject Comments tags into index.html.");
-        }
-    }
-
     /// <inheritdoc />
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
-    }
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }
