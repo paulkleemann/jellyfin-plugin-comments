@@ -5,11 +5,15 @@
     <AssemblyName>Jellyfin.Plugin.Comments</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.Comments</RootNamespace>
     <Nullable>enable</Nullable>
-    <Version>0.1.6.0</Version>
+    <Version>0.1.7.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Web/comments.js" LogicalName="Jellyfin.Plugin.Comments.Web.comments.js" />
   </ItemGroup>
 
   <ItemGroup>

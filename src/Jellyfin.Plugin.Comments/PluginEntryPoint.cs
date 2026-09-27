@@ -413,22 +413,40 @@ public class PluginEntryPoint : IHostedService
                         setTimeout(injectCommentsSection, 1200);
                     })();
                     """;
-                File.WriteAllText(jsPath, defaultJs);
+                File.WriteAllText(jsPath, ReadBundledFrontendScript() ?? defaultJs);
                 _logger.LogInformation("Created template comments.js in {Path}", jsPath);
             }
             else
             {
                 var existingJs = File.ReadAllText(jsPath);
-                var migratedJs = existingJs
-                    .Replace("comment.userName", "comment.UserName", StringComparison.Ordinal)
-                    .Replace("comment.createdAt", "comment.CreatedAt", StringComparison.Ordinal)
-                    .Replace("comment.text", "comment.Text", StringComparison.Ordinal)
-                    .Replace("comment.replies", "comment.Replies", StringComparison.Ordinal);
-
-                if (!string.Equals(existingJs, migratedJs, StringComparison.Ordinal))
+                if (existingJs.Contains("Jellyfin Comments Plugin - Live Frontend Script", StringComparison.Ordinal))
                 {
-                    File.WriteAllText(jsPath, migratedJs);
-                    _logger.LogInformation("Updated comments.js to match Jellyfin API property names.");
+                    var bundledJs = ReadBundledFrontendScript();
+                    if (bundledJs is not null)
+                    {
+                        var backupPath = jsPath + ".bak";
+                        if (!File.Exists(backupPath))
+                        {
+                            File.Copy(jsPath, backupPath);
+                        }
+
+                        File.WriteAllText(jsPath, bundledJs);
+                        _logger.LogInformation("Replaced the legacy comments.js with the bundled frontend; backup saved to {Path}.", backupPath);
+                    }
+                }
+                else
+                {
+                    var migratedJs = existingJs
+                        .Replace("comment.userName", "comment.UserName", StringComparison.Ordinal)
+                        .Replace("comment.createdAt", "comment.CreatedAt", StringComparison.Ordinal)
+                        .Replace("comment.text", "comment.Text", StringComparison.Ordinal)
+                        .Replace("comment.replies", "comment.Replies", StringComparison.Ordinal);
+
+                    if (!string.Equals(existingJs, migratedJs, StringComparison.Ordinal))
+                    {
+                        File.WriteAllText(jsPath, migratedJs);
+                        _logger.LogInformation("Updated comments.js to match Jellyfin API property names.");
+                    }
                 }
             }
         }
@@ -436,6 +454,18 @@ public class PluginEntryPoint : IHostedService
         {
             _logger.LogError(ex, "Failed to setup frontend template files in config/comments-ui.");
         }
+    }
+
+    private static string? ReadBundledFrontendScript()
+    {
+        using var stream = typeof(PluginEntryPoint).Assembly.GetManifestResourceStream("Jellyfin.Plugin.Comments.Web.comments.js");
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
     }
 
     /// <inheritdoc />

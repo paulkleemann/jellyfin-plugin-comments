@@ -8,12 +8,12 @@
     "category": "General",
     "versions": [
       {
-        "version": "0.1.6.0",
-        "changelog": "Fix comment date and field rendering; migrate existing frontend script.",
+        "version": "0.1.7.0",
+        "changelog": "Bundle the complete frontend with replies and comment deletion.",
         "targetAbi": "10.11.7.0",
-        "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.6.0/Jellyfin.Plugin.Comments_v0.1.6.0.zip",
-        "checksum": "3647ed44e155fcf84eaaf6165023b254",
-        "timestamp": "2026-09-27T10:49:14Z"
+        "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.7.0/Jellyfin.Plugin.Comments_v0.1.7.0.zip",
+        "checksum": "eeaa72d32cae931404a0191456386e8c",
+        "timestamp": "2026-09-27T11:07:15Z"
       }
     ]
   }
