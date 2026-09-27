@@ -416,6 +416,21 @@ public class PluginEntryPoint : IHostedService
                 File.WriteAllText(jsPath, defaultJs);
                 _logger.LogInformation("Created template comments.js in {Path}", jsPath);
             }
+            else
+            {
+                var existingJs = File.ReadAllText(jsPath);
+                var migratedJs = existingJs
+                    .Replace("comment.userName", "comment.UserName", StringComparison.Ordinal)
+                    .Replace("comment.createdAt", "comment.CreatedAt", StringComparison.Ordinal)
+                    .Replace("comment.text", "comment.Text", StringComparison.Ordinal)
+                    .Replace("comment.replies", "comment.Replies", StringComparison.Ordinal);
+
+                if (!string.Equals(existingJs, migratedJs, StringComparison.Ordinal))
+                {
+                    File.WriteAllText(jsPath, migratedJs);
+                    _logger.LogInformation("Updated comments.js to match Jellyfin API property names.");
+                }
+            }
         }
         catch (Exception ex)
         {

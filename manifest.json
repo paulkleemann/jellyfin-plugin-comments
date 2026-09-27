@@ -8,12 +8,12 @@
     "category": "General",
     "versions": [
       {
-        "version": "0.1.5.0",
-        "changelog": "Fix frontend asset paths for File Transformation integration.",
+        "version": "0.1.6.0",
+        "changelog": "Fix comment date and field rendering; migrate existing frontend script.",
         "targetAbi": "10.11.7.0",
-        "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.5.0/Jellyfin.Plugin.Comments_v0.1.5.0.zip",
-        "checksum": "f211bfb1dea2489e0d793088f8842113",
-        "timestamp": "2026-09-27T10:19:34Z"
+        "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.6.0/Jellyfin.Plugin.Comments_v0.1.6.0.zip",
+        "checksum": "3647ed44e155fcf84eaaf6165023b254",
+        "timestamp": "2026-09-27T10:49:14Z"
       }
     ]
   }
