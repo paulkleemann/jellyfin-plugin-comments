@@ -39,13 +39,20 @@ public class CommentsController : ControllerBase
     }
 
     /// <summary>
-    /// Serves the frontend comments.js script directly from config/comments-ui.
+    /// Serves the bundled frontend script, falling back to config/comments-ui for older builds.
     /// Route: GET /Comments/ClientScript.js
     /// </summary>
     [HttpGet("Comments/ClientScript.js")]
     [Produces("application/javascript")]
     public ActionResult GetClientScript()
     {
+        var bundledScript = typeof(CommentsController).Assembly.GetManifestResourceStream("Jellyfin.Plugin.Comments.Web.comments.js");
+        if (bundledScript is not null)
+        {
+            Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
+            return File(bundledScript, "application/javascript");
+        }
+
         var scriptPath = Path.Combine(_applicationPaths.ConfigurationDirectoryPath, "comments-ui", "comments.js");
         if (System.IO.File.Exists(scriptPath))
         {

@@ -5,7 +5,7 @@
     <AssemblyName>Jellyfin.Plugin.Comments</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.Comments</RootNamespace>
     <Nullable>enable</Nullable>
-    <Version>0.1.8.0</Version>
+    <Version>0.1.9.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
