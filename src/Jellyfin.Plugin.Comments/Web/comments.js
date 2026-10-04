@@ -1,5 +1,5 @@
 /* Jellyfin Comments Plugin - Frontend Integration
- * Jellyfin Comments Frontend Version: 0.1.9.0
+ * Jellyfin Comments Frontend Version: 0.1.10.0
  */
 (function () {
     const ONLY_FOR_USER = null;
@@ -30,8 +30,7 @@
         .jf-comment-actions { display: flex; gap: 8px; align-items: center; }
         .jf-replies-list { margin-left: 20px; border-left: 2px solid rgba(255,255,255,.12); padding-left: 12px; margin-top: 8px; }
         .jf-reply-box { margin-top: 8px; margin-bottom: 8px; }
-        .jf-playback-comment-control { position: fixed; right: 20px; bottom: 92px; z-index: 2147483000; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; width: min(340px, calc(100vw - 32px)); }
-        .jf-playback-comment-panel { display: none; width: 100%; padding: 12px; background: rgba(18,18,18,.96); border: 1px solid rgba(255,255,255,.18); border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,.5); box-sizing: border-box; }
+        .jf-playback-comment-panel { display: none; position: fixed; right: 20px; bottom: 92px; z-index: 2147483000; width: min(340px, calc(100vw - 32px)); padding: 12px; background: rgba(18,18,18,.96); border: 1px solid rgba(255,255,255,.18); border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,.5); box-sizing: border-box; }
         .jf-playback-comment-panel textarea { min-height: 74px; }
         .jf-playback-comment-position { margin-bottom: 8px; color: #6bc5ee; font-size: .9em; }
         .jf-playback-comment-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -123,59 +122,39 @@
 
     function updatePlaybackCommentControl() {
         const video = getActiveVideo();
-        let control = document.getElementById("jf-playback-comment-control");
+        let button = document.getElementById("jf-playback-comment-button");
+        let panel = document.getElementById("jf-playback-comment-panel");
         if (!video) {
-            control?.remove();
+            button?.remove();
+            panel?.remove();
             return;
         }
 
         const host = video.closest(".videoPlayerContainer") || document.body;
-        if (!control) {
-            control = document.createElement("div");
-            control.id = "jf-playback-comment-control";
-            control.className = "jf-playback-comment-control";
-            control.innerHTML = `
-                <div class="jf-playback-comment-panel" data-role="playback-panel">
+        const subtitlesButton = document.querySelector(".videoOsdBottom .buttons .btnSubtitles");
+        if (!subtitlesButton) {
+            button?.remove();
+            panel?.remove();
+            return;
+        }
+
+        if (!panel) {
+            panel = document.createElement("div");
+            panel.id = "jf-playback-comment-panel";
+            panel.className = "jf-playback-comment-panel";
+            panel.innerHTML = `
                     <div class="jf-playback-comment-position" data-role="playback-position"></div>
                     <textarea class="jf-comment-textarea" data-role="playback-text" placeholder="Kommentar zu dieser Stelle..."></textarea>
                     <div class="jf-playback-comment-actions">
                         <button class="jf-comment-btn-secondary" data-role="playback-cancel">Abbrechen</button>
                         <button class="jf-comment-btn" data-role="playback-submit">Kommentieren</button>
-                    </div>
-                </div>
-                <button class="jf-comment-btn" data-role="playback-open">💬 Kommentar bei 00:00</button>`;
+                    </div>`;
+            host.appendChild(panel);
 
-            const panel = control.querySelector('[data-role="playback-panel"]');
-            const positionLabel = control.querySelector('[data-role="playback-position"]');
-            const textInput = control.querySelector('[data-role="playback-text"]');
-            const openButton = control.querySelector('[data-role="playback-open"]');
-            const submitButton = control.querySelector('[data-role="playback-submit"]');
+            const textInput = panel.querySelector('[data-role="playback-text"]');
+            const submitButton = panel.querySelector('[data-role="playback-submit"]');
 
-            openButton.onclick = async () => {
-                const activeVideo = getActiveVideo();
-                if (!activeVideo) return;
-                openButton.disabled = true;
-                try {
-                    const sourceAtClick = activeVideo.currentSrc;
-                    const positionTicks = Math.max(0, Math.round(activeVideo.currentTime * 10000000));
-                    const itemId = await getCurrentPlaybackItemId();
-                    if (getActiveVideo() !== activeVideo || activeVideo.currentSrc !== sourceAtClick) {
-                        throw new Error("Die Wiedergabe hat währenddessen das Medium gewechselt. Bitte erneut klicken.");
-                    }
-                    control.dataset.itemId = itemId;
-                    control.dataset.positionTicks = String(positionTicks);
-                    positionLabel.textContent = `Zeitmarke: ${formatPosition(positionTicks)}`;
-                    panel.style.display = "block";
-                    textInput.focus();
-                } catch (error) {
-                    console.error("Could not get current playback context:", error);
-                    alert(error.message || "Aktuelle Wiedergabe konnte nicht ermittelt werden.");
-                } finally {
-                    openButton.disabled = false;
-                }
-            };
-
-            control.querySelector('[data-role="playback-cancel"]').onclick = () => {
+            panel.querySelector('[data-role="playback-cancel"]').onclick = () => {
                 panel.style.display = "none";
                 textInput.value = "";
             };
@@ -185,14 +164,13 @@
                 if (!text) return;
                 submitButton.disabled = true;
                 try {
-                    const response = await jfApi(`/Items/${control.dataset.itemId}/Comments`, {
+                    const response = await jfApi(`/Items/${panel.dataset.itemId}/Comments`, {
                         method: "POST",
-                        body: JSON.stringify({ text, parentCommentId: null, positionTicks: Number(control.dataset.positionTicks) })
+                        body: JSON.stringify({ text, parentCommentId: null, positionTicks: Number(panel.dataset.positionTicks) })
                     });
                     if (response.ok) {
                         textInput.value = "";
                         panel.style.display = "none";
-                        openButton.textContent = `💬 Kommentar bei ${positionLabel.textContent.replace("Zeitmarke: ", "")}`;
                     } else {
                         alert(`Kommentar konnte nicht gespeichert werden (HTTP ${response.status}).`);
                     }
@@ -205,10 +183,46 @@
             };
         }
 
-        if (control.parentElement !== host) host.appendChild(control);
-        if (control.querySelector('[data-role="playback-panel"]').style.display !== "block") {
-            const currentTicks = Math.max(0, Math.round(video.currentTime * 10000000));
-            control.querySelector('[data-role="playback-open"]').textContent = `💬 Kommentar bei ${formatPosition(currentTicks)}`;
+        if (panel.parentElement !== host) host.appendChild(panel);
+        if (!button) {
+            button = document.createElement("button");
+            button.id = "jf-playback-comment-button";
+            button.type = "button";
+            button.className = "paper-icon-button-light autoSize jf-player-comment-button";
+            button.title = "Kommentar an dieser Stelle verfassen";
+            button.setAttribute("aria-label", button.title);
+            button.innerHTML = '<span class="material-icons comment" aria-hidden="true"></span>';
+            button.onclick = async () => {
+                const activeVideo = getActiveVideo();
+                if (!activeVideo) return;
+                button.disabled = true;
+                try {
+                    const sourceAtClick = activeVideo.currentSrc;
+                    const positionTicks = Math.max(0, Math.round(activeVideo.currentTime * 10000000));
+                    const itemId = await getCurrentPlaybackItemId();
+                    if (getActiveVideo() !== activeVideo || activeVideo.currentSrc !== sourceAtClick) {
+                        throw new Error("Die Wiedergabe hat währenddessen das Medium gewechselt. Bitte erneut klicken.");
+                    }
+                    panel.dataset.itemId = itemId;
+                    panel.dataset.positionTicks = String(positionTicks);
+                    panel.dataset.videoSource = sourceAtClick;
+                    panel.querySelector('[data-role="playback-position"]').textContent = `Zeitmarke: ${formatPosition(positionTicks)}`;
+                    panel.style.display = "block";
+                    panel.querySelector('[data-role="playback-text"]').focus();
+                } catch (error) {
+                    console.error("Could not get current playback context:", error);
+                    alert(error.message || "Aktuelle Wiedergabe konnte nicht ermittelt werden.");
+                } finally {
+                    button.disabled = false;
+                }
+            };
+        }
+
+        if (button.parentElement !== subtitlesButton.parentElement || button.previousElementSibling !== subtitlesButton) {
+            subtitlesButton.insertAdjacentElement("afterend", button);
+        }
+        if (panel.dataset.videoSource && panel.dataset.videoSource !== video.currentSrc) {
+            panel.style.display = "none";
         }
     }
 

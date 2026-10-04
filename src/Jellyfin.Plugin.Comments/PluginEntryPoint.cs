@@ -107,7 +107,7 @@ public class PluginEntryPoint : IHostedService
 
         const string tags = """
             <link rel="stylesheet" href="../Comments/Styles.css">
-            <script src="../Comments/ClientScript.js?v=0.1.9.0" defer></script>
+            <script src="../Comments/ClientScript.js?v=0.1.10.0" defer></script>
             """;
 
         return contents.Replace("</body>", $"{tags}\n</body>", StringComparison.OrdinalIgnoreCase);
@@ -424,7 +424,7 @@ public class PluginEntryPoint : IHostedService
                 if (hasManagedFrontendMarker)
                 {
                     var bundledJs = ReadBundledFrontendScript();
-                    var isCurrentFrontend = existingJs.Contains("Jellyfin Comments Frontend Version: 0.1.9.0", StringComparison.Ordinal);
+                    var isCurrentFrontend = existingJs.Contains("Jellyfin Comments Frontend Version: 0.1.10.0", StringComparison.Ordinal);
                     if (bundledJs is not null && !isCurrentFrontend)
                     {
                         var backupPath = jsPath + ".bak";
