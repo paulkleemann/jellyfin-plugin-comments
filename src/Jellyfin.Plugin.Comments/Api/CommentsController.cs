@@ -95,6 +95,7 @@ public class CommentsController : ControllerBase
             Text = c.Text,
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt,
+            PositionTicks = c.PositionTicks,
             CanDelete = c.UserId == currentUserId && (Plugin.Instance?.Configuration.AllowUsersToDeleteOwnComments ?? false)
         });
 
@@ -137,6 +138,9 @@ public class CommentsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Text))
             return BadRequest("Comment text cannot be empty.");
 
+        if (request.PositionTicks < 0)
+            return BadRequest("Comment position cannot be negative.");
+
         if (request.Text.Length > config.MaxCommentLength)
             return BadRequest($"Comment exceeds maximum length of {config.MaxCommentLength} characters.");
 
@@ -153,7 +157,8 @@ public class CommentsController : ControllerBase
             UserId = userId,
             ParentCommentId = request.ParentCommentId,
             Text = request.Text.Trim(),
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow,
+            PositionTicks = request.PositionTicks
         };
 
         await _commentRepository.AddCommentAsync(newComment, cancellationToken);
@@ -167,6 +172,7 @@ public class CommentsController : ControllerBase
             ParentCommentId = newComment.ParentCommentId,
             Text = newComment.Text,
             CreatedAt = newComment.CreatedAt,
+            PositionTicks = newComment.PositionTicks,
             CanDelete = config.AllowUsersToDeleteOwnComments
         };
 

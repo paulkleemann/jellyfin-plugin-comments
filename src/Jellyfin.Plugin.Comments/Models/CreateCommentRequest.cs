@@ -16,4 +16,9 @@ public class CreateCommentRequest
     /// Gets or sets the optional parent comment ID to reply to.
     /// </summary>
     public Guid? ParentCommentId { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional playback position in Jellyfin ticks (10,000,000 ticks per second).
+    /// </summary>
+    public long? PositionTicks { get; set; }
 }

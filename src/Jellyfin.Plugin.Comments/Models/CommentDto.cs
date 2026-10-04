@@ -49,6 +49,11 @@ public class CommentDto
     public DateTimeOffset? UpdatedAt { get; set; }
 
     /// <summary>
+    /// Gets or sets the optional playback position in Jellyfin ticks.
+    /// </summary>
+    public long? PositionTicks { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the requesting user is allowed to delete this comment.
     /// </summary>
     public bool CanDelete { get; set; }

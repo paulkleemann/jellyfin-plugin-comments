@@ -41,4 +41,9 @@ public class StoredComment
     /// Gets or sets the timestamp when the comment was last edited (UTC).
     /// </summary>
     public DateTimeOffset? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the optional playback position in Jellyfin ticks.
+    /// </summary>
+    public long? PositionTicks { get; set; }
 }

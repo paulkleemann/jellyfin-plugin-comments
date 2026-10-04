@@ -419,10 +419,13 @@ public class PluginEntryPoint : IHostedService
             else
             {
                 var existingJs = File.ReadAllText(jsPath);
-                if (existingJs.Contains("Jellyfin Comments Plugin - Live Frontend Script", StringComparison.Ordinal))
+                var hasManagedFrontendMarker = existingJs.Contains("Jellyfin Comments Frontend Version:", StringComparison.Ordinal)
+                    || existingJs.Contains("Jellyfin Comments Plugin - Live Frontend Script", StringComparison.Ordinal);
+                if (hasManagedFrontendMarker)
                 {
                     var bundledJs = ReadBundledFrontendScript();
-                    if (bundledJs is not null)
+                    var isCurrentFrontend = existingJs.Contains("Jellyfin Comments Frontend Version: 0.1.8.0", StringComparison.Ordinal);
+                    if (bundledJs is not null && !isCurrentFrontend)
                     {
                         var backupPath = jsPath + ".bak";
                         if (!File.Exists(backupPath))

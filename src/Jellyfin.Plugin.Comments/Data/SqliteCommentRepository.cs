@@ -48,12 +48,33 @@ public class SqliteCommentRepository : ICommentRepository
                 ParentCommentId TEXT,
                 Text TEXT NOT NULL,
                 CreatedAt TEXT NOT NULL,
-                UpdatedAt TEXT
+                UpdatedAt TEXT,
+                PositionTicks INTEGER NULL
             );
             """;
 
         await using var command = new SqliteCommand(createTableSql, connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        var hasPositionTicks = false;
+        await using (var columnsCommand = new SqliteCommand("PRAGMA table_info(Comments);", connection))
+        await using (var columnsReader = await columnsCommand.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await columnsReader.ReadAsync(cancellationToken))
+            {
+                if (string.Equals(columnsReader.GetString(1), "PositionTicks", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasPositionTicks = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasPositionTicks)
+        {
+            await using var migrationCommand = new SqliteCommand("ALTER TABLE Comments ADD COLUMN PositionTicks INTEGER NULL;", connection);
+            await migrationCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 
     public async Task AddCommentAsync(StoredComment comment, CancellationToken cancellationToken = default)
@@ -64,8 +85,8 @@ public class SqliteCommentRepository : ICommentRepository
         // Wir nutzen @-Parameter (@Id, @Text etc.). Das schützt uns vor SQL-Injection!
         // Niemals Strings einfach mit einem + zusammenbauen.
         const string sql = """
-            INSERT INTO Comments (Id, ItemId, UserId, ParentCommentId, Text, CreatedAt, UpdatedAt)
-            VALUES (@Id, @ItemId, @UserId, @ParentCommentId, @Text, @CreatedAt, @UpdatedAt);
+            INSERT INTO Comments (Id, ItemId, UserId, ParentCommentId, Text, CreatedAt, UpdatedAt, PositionTicks)
+            VALUES (@Id, @ItemId, @UserId, @ParentCommentId, @Text, @CreatedAt, @UpdatedAt, @PositionTicks);
             """;
 
         await using var command = new SqliteCommand(sql, connection);
@@ -78,6 +99,7 @@ public class SqliteCommentRepository : ICommentRepository
         command.Parameters.AddWithValue("@Text", comment.Text);
         command.Parameters.AddWithValue("@CreatedAt", comment.CreatedAt.ToString("O"));
         command.Parameters.AddWithValue("@UpdatedAt", comment.UpdatedAt?.ToString("O") ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@PositionTicks", comment.PositionTicks.HasValue ? (object)comment.PositionTicks.Value : DBNull.Value);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -170,7 +192,8 @@ public class SqliteCommentRepository : ICommentRepository
             ParentCommentId = reader.IsDBNull(3) ? null : Guid.Parse(reader.GetString(3)),
             Text = reader.GetString(4),
             CreatedAt = DateTimeOffset.Parse(reader.GetString(5)),
-            UpdatedAt = reader.IsDBNull(6) ? null : DateTimeOffset.Parse(reader.GetString(6))
+            UpdatedAt = reader.IsDBNull(6) ? null : DateTimeOffset.Parse(reader.GetString(6)),
+            PositionTicks = reader.IsDBNull(7) ? null : reader.GetInt64(7)
         };
     }
 }
