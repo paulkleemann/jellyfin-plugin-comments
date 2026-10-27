@@ -107,7 +107,7 @@ public class PluginEntryPoint : IHostedService
 
         const string tags = """
             <link rel="stylesheet" href="../Comments/Styles.css">
-            <script src="../Comments/ClientScript.js?v=0.1.10.0" defer></script>
+            <script src="../Comments/ClientScript.js?v=0.1.11.0" defer></script>
             """;
 
         return contents.Replace("</body>", $"{tags}\n</body>", StringComparison.OrdinalIgnoreCase);
