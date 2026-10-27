@@ -8,12 +8,12 @@
     "category": "General",
     "versions": [
       {
-        "version": "0.1.12.0",
-        "changelog": "Keep the playback comment form usable and isolate typing from player shortcuts.",
+        "version": "0.1.13.0",
+        "changelog": "Display timestamped comments in the player when playback reaches their position.",
         "targetAbi": "10.11.7.0",
-        "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.12.0/Jellyfin.Plugin.Comments_v0.1.12.0.zip",
-        "checksum": "bd790d233d54abd6b229d2672451fcf6",
-        "timestamp": "2026-10-27T13:45:32Z"
+        "sourceUrl": "https://github.com/paulkleemann/jellyfin-plugin-comments/releases/download/v0.1.13.0/Jellyfin.Plugin.Comments_v0.1.13.0.zip",
+        "checksum": "2408e56864a870f814778a49fc8860e9",
+        "timestamp": "2026-10-27T14:24:28Z"
       }
     ]
   }

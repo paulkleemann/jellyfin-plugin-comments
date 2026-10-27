@@ -1,5 +1,5 @@
 /* Jellyfin Comments Plugin - Frontend Integration
- * Jellyfin Comments Frontend Version: 0.1.12.0
+ * Jellyfin Comments Frontend Version: 0.1.13.0
  */
 (function () {
     const ONLY_FOR_USER = null;
@@ -34,6 +34,10 @@
         .jf-playback-comment-panel textarea { min-height: 74px; }
         .jf-playback-comment-position { margin-bottom: 8px; color: #6bc5ee; font-size: .9em; }
         .jf-playback-comment-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+        .jf-timed-comment-host { position: relative !important; }
+        .jf-timed-comments-overlay { position: absolute; z-index: 2147482999; top: 12%; left: 50%; transform: translateX(-50%); width: min(680px, 82%); max-height: 55%; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+        .jf-timed-comment-card { width: fit-content; max-width: 100%; padding: 10px 16px; border-radius: 8px; background: rgba(0,0,0,.78); border: 1px solid rgba(255,255,255,.2); box-shadow: 0 2px 12px rgba(0,0,0,.45); color: #fff; text-align: center; font-size: clamp(14px, 2.2vw, 22px); line-height: 1.35; overflow-wrap: anywhere; }
+        .jf-timed-comment-author { display: block; margin-bottom: 3px; color: #6bc5ee; font-size: .7em; font-weight: 600; }
     `;
     if (!document.getElementById(style.id)) document.head.appendChild(style);
 
@@ -77,6 +81,275 @@
         const seconds = totalSeconds % 60;
         const pad = value => String(value).padStart(2, "0");
         return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    const TIMED_COMMENT_DISPLAY_MS = 8000;
+    const TIMED_COMMENT_SEEK_TOLERANCE_SECONDS = 1;
+    const TIMED_COMMENT_REFRESH_MS = 15000;
+    let trackedPlaybackVideo = null;
+    let trackedPlaybackSource = null;
+    let trackedPlaybackItemId = null;
+    let timedPlaybackComments = [];
+    let displayedTimedCommentIds = new Set();
+    let playbackTrackingGeneration = 0;
+    let previousPlaybackTime = null;
+    let timedCommentsOverlay = null;
+    let timedCommentsHost = null;
+    let timedCommentsLoading = false;
+    let timedCommentsLoaded = false;
+    let timedCommentsRetryAfter = 0;
+    let timedCommentsLastFetchedAt = 0;
+
+    function removeTimedCommentsOverlay() {
+        timedCommentsOverlay?.remove();
+        timedCommentsOverlay = null;
+        if (timedCommentsHost) timedCommentsHost.classList.remove("jf-timed-comment-host");
+        timedCommentsHost = null;
+    }
+
+    function getTimedCommentsHost(video) {
+        if (document.fullscreenElement?.contains(video)) return document.fullscreenElement;
+        return video.closest(".videoPlayerContainer") || video.parentElement || document.body;
+    }
+
+    function ensureTimedCommentsOverlay(video) {
+        const host = getTimedCommentsHost(video);
+        if (timedCommentsOverlay?.parentElement === host) return timedCommentsOverlay;
+
+        removeTimedCommentsOverlay();
+        timedCommentsHost = host;
+        if (host !== document.body) host.classList.add("jf-timed-comment-host");
+
+        timedCommentsOverlay = document.createElement("div");
+        timedCommentsOverlay.className = "jf-timed-comments-overlay";
+        timedCommentsOverlay.setAttribute("role", "log");
+        timedCommentsOverlay.setAttribute("aria-live", "polite");
+        host.appendChild(timedCommentsOverlay);
+        return timedCommentsOverlay;
+    }
+
+    function flattenTimedComments(comments) {
+        const timed = [];
+        const visit = entries => {
+            for (const comment of entries || []) {
+                const positionTicks = comment.PositionTicks == null ? null : Number(comment.PositionTicks);
+                const text = comment.Text || comment.text;
+                if (Number.isSafeInteger(positionTicks) && positionTicks >= 0 && text) {
+                    timed.push({
+                        id: String(comment.Id || comment.id),
+                        positionTicks,
+                        userName: comment.UserName || comment.userName || "Unbekannt",
+                        text
+                    });
+                }
+                visit(comment.Replies || comment.replies);
+            }
+        };
+        visit(comments);
+        return timed.sort((a, b) => a.positionTicks - b.positionTicks);
+    }
+
+    function showTimedComment(comment, video) {
+        const overlay = ensureTimedCommentsOverlay(video);
+        const card = document.createElement("div");
+        card.className = "jf-timed-comment-card";
+
+        const author = document.createElement("span");
+        author.className = "jf-timed-comment-author";
+        author.textContent = `${comment.userName} · ${formatPosition(comment.positionTicks)}`;
+
+        const text = document.createElement("span");
+        text.textContent = comment.text;
+        card.append(author, text);
+        overlay.appendChild(card);
+
+        window.setTimeout(() => {
+            card.remove();
+            if (overlay.isConnected && overlay.childElementCount === 0) removeTimedCommentsOverlay();
+        }, TIMED_COMMENT_DISPLAY_MS);
+    }
+
+    function displayCommentsNearPosition(positionSeconds, video) {
+        for (const comment of timedPlaybackComments) {
+            const commentSeconds = comment.positionTicks / 10000000;
+            if (!displayedTimedCommentIds.has(comment.id)
+                && Math.abs(commentSeconds - positionSeconds) <= TIMED_COMMENT_SEEK_TOLERANCE_SECONDS) {
+                displayedTimedCommentIds.add(comment.id);
+                showTimedComment(comment, video);
+            }
+        }
+    }
+
+    function handlePlaybackTimeUpdate() {
+        const video = trackedPlaybackVideo;
+        if (!video || !trackedPlaybackItemId || !Number.isFinite(video.currentTime)) return;
+
+        const currentTime = video.currentTime;
+        if (previousPlaybackTime === null) {
+            previousPlaybackTime = currentTime;
+            displayCommentsNearPosition(currentTime, video);
+            return;
+        }
+
+        if (currentTime < previousPlaybackTime - 0.5) {
+            for (const comment of timedPlaybackComments) {
+                if (comment.positionTicks / 10000000 >= currentTime - TIMED_COMMENT_SEEK_TOLERANCE_SECONDS) {
+                    displayedTimedCommentIds.delete(comment.id);
+                }
+            }
+            previousPlaybackTime = currentTime;
+            displayCommentsNearPosition(currentTime, video);
+            return;
+        }
+
+        const jumpedForward = currentTime - previousPlaybackTime > 3;
+        if (jumpedForward) {
+            for (const comment of timedPlaybackComments) {
+                if (comment.positionTicks / 10000000 < currentTime - TIMED_COMMENT_SEEK_TOLERANCE_SECONDS) {
+                    displayedTimedCommentIds.add(comment.id);
+                }
+            }
+            displayCommentsNearPosition(currentTime, video);
+        } else {
+            for (const comment of timedPlaybackComments) {
+                const commentSeconds = comment.positionTicks / 10000000;
+                if (!displayedTimedCommentIds.has(comment.id)
+                    && commentSeconds > previousPlaybackTime
+                    && commentSeconds <= currentTime) {
+                    displayedTimedCommentIds.add(comment.id);
+                    showTimedComment(comment, video);
+                }
+            }
+        }
+
+        previousPlaybackTime = currentTime;
+    }
+
+    function handleVideoSeeked() {
+        const video = trackedPlaybackVideo;
+        if (!video || !Number.isFinite(video.currentTime)) return;
+        const currentTime = video.currentTime;
+        for (const comment of timedPlaybackComments) {
+            const commentSeconds = comment.positionTicks / 10000000;
+            if (commentSeconds < currentTime - TIMED_COMMENT_SEEK_TOLERANCE_SECONDS) {
+                displayedTimedCommentIds.add(comment.id);
+            } else {
+                displayedTimedCommentIds.delete(comment.id);
+            }
+        }
+        previousPlaybackTime = currentTime;
+        displayCommentsNearPosition(currentTime, video);
+    }
+
+    async function updateTimedPlaybackComments() {
+        if (!window.ApiClient) return;
+        const video = getActiveVideo();
+        if (!video) {
+            if (trackedPlaybackVideo) playbackTrackingGeneration++;
+            trackedPlaybackVideo?.removeEventListener("timeupdate", handlePlaybackTimeUpdate);
+            trackedPlaybackVideo?.removeEventListener("seeked", handleVideoSeeked);
+            trackedPlaybackVideo = null;
+            trackedPlaybackSource = null;
+            trackedPlaybackItemId = null;
+            timedPlaybackComments = [];
+            displayedTimedCommentIds.clear();
+            previousPlaybackTime = null;
+            timedCommentsLoading = false;
+            timedCommentsLoaded = false;
+            timedCommentsLastFetchedAt = 0;
+            removeTimedCommentsOverlay();
+            return;
+        }
+
+        const source = video.currentSrc || video.src || "";
+        let currentItemId = null;
+        try {
+            currentItemId = window.playbackManager?.currentItem?.()?.Id || null;
+        } catch (error) {
+            console.warn("Could not read the current playback item:", error);
+        }
+
+        const samePlayback = video === trackedPlaybackVideo && source === trackedPlaybackSource
+            && (!currentItemId || currentItemId === trackedPlaybackItemId);
+        if (samePlayback && (timedCommentsLoading
+            || (timedCommentsLoaded && Date.now() - timedCommentsLastFetchedAt < TIMED_COMMENT_REFRESH_MS)
+            || Date.now() < timedCommentsRetryAfter)) return;
+
+        const playbackChanged = !samePlayback;
+        const generation = playbackChanged ? ++playbackTrackingGeneration : playbackTrackingGeneration;
+        if (trackedPlaybackVideo !== video) {
+            trackedPlaybackVideo?.removeEventListener("timeupdate", handlePlaybackTimeUpdate);
+            trackedPlaybackVideo?.removeEventListener("seeked", handleVideoSeeked);
+            video.addEventListener("timeupdate", handlePlaybackTimeUpdate);
+            video.addEventListener("seeked", handleVideoSeeked);
+        }
+        trackedPlaybackVideo = video;
+        trackedPlaybackSource = source;
+        if (playbackChanged) {
+            trackedPlaybackItemId = currentItemId;
+            timedPlaybackComments = [];
+            displayedTimedCommentIds.clear();
+            previousPlaybackTime = video.currentTime;
+            timedCommentsLoading = false;
+            timedCommentsLoaded = false;
+            timedCommentsRetryAfter = 0;
+            timedCommentsLastFetchedAt = 0;
+            removeTimedCommentsOverlay();
+        }
+
+        timedCommentsLoading = true;
+        let itemId;
+        try {
+            itemId = currentItemId || await getCurrentPlaybackItemId();
+        } catch (error) {
+            if (generation === playbackTrackingGeneration) {
+                timedCommentsLoading = false;
+                timedCommentsRetryAfter = Date.now() + 5000;
+            }
+            console.error("Could not identify the playing item for timed comments:", error);
+            return;
+        }
+        if (generation !== playbackTrackingGeneration || video !== getActiveVideo()) return;
+
+        trackedPlaybackItemId = itemId;
+        let response;
+        try {
+            response = await jfApi(`/Items/${itemId}/Comments`);
+        } catch (error) {
+            if (generation === playbackTrackingGeneration) {
+                timedCommentsLoading = false;
+                timedCommentsRetryAfter = Date.now() + 5000;
+            }
+            console.error("Could not load timed playback comments:", error);
+            return;
+        }
+        if (generation !== playbackTrackingGeneration) return;
+        if (!response.ok) {
+            timedCommentsLoading = false;
+            timedCommentsRetryAfter = Date.now() + 5000;
+            console.error("Could not load timed playback comments:", response.status, response.body);
+            return;
+        }
+
+        timedPlaybackComments = flattenTimedComments(response.body);
+        timedCommentsLoading = false;
+        timedCommentsLoaded = true;
+        timedCommentsLastFetchedAt = Date.now();
+        const currentTime = video.currentTime;
+        if (previousPlaybackTime !== null && currentTime >= previousPlaybackTime
+            && currentTime - previousPlaybackTime <= 3) {
+            for (const comment of timedPlaybackComments) {
+                const commentSeconds = comment.positionTicks / 10000000;
+                if (!displayedTimedCommentIds.has(comment.id)
+                    && commentSeconds > previousPlaybackTime
+                    && commentSeconds <= currentTime) {
+                    displayedTimedCommentIds.add(comment.id);
+                    showTimedComment(comment, video);
+                }
+            }
+        }
+        previousPlaybackTime = currentTime;
+        displayCommentsNearPosition(currentTime, video);
     }
 
     async function jumpToPosition(itemId, positionTicks) {
@@ -434,5 +707,8 @@
     setInterval(() => {
         checkCurrentPage();
         updatePlaybackCommentControl();
+        updateTimedPlaybackComments().catch(error => {
+            console.error("Could not update timed playback comments:", error);
+        });
     }, 1000);
 })();
