@@ -1,5 +1,5 @@
 /* Jellyfin Comments Plugin - Frontend Integration
- * Jellyfin Comments Frontend Version: 0.1.11.0
+ * Jellyfin Comments Frontend Version: 0.1.12.0
  */
 (function () {
     const ONLY_FOR_USER = null;
@@ -36,6 +36,16 @@
         .jf-playback-comment-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
     `;
     if (!document.getElementById(style.id)) document.head.appendChild(style);
+
+    function stopPlaybackShortcuts(event) {
+        if (event.target instanceof Element && event.target.closest("#jf-playback-comment-panel")) {
+            event.stopImmediatePropagation();
+        }
+    }
+
+    ["keydown", "keypress", "keyup"].forEach(eventName => {
+        window.addEventListener(eventName, stopPlaybackShortcuts, true);
+    });
 
     function escapeHtml(value) {
         const div = document.createElement("div");
@@ -126,7 +136,7 @@
         let panel = document.getElementById("jf-playback-comment-panel");
         if (!video) {
             button?.remove();
-            panel?.remove();
+            if (panel?.style.display !== "block") panel?.remove();
             return;
         }
 
@@ -147,7 +157,6 @@
                         <button class="jf-comment-btn-secondary" data-role="playback-cancel">Abbrechen</button>
                         <button class="jf-comment-btn" data-role="playback-submit">Kommentieren</button>
                     </div>`;
-            panel.addEventListener("keydown", event => event.stopPropagation());
             document.body.appendChild(panel);
 
             const textInput = panel.querySelector('[data-role="playback-text"]');
