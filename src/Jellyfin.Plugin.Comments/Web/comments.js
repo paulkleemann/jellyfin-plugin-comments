@@ -1,5 +1,5 @@
 /* Jellyfin Comments Plugin - Frontend Integration
- * Jellyfin Comments Frontend Version: 0.1.13.0
+ * Jellyfin Comments Frontend Version: 0.1.14.0
  */
 (function () {
     const ONLY_FOR_USER = null;
@@ -108,7 +108,11 @@
     }
 
     function getTimedCommentsHost(video) {
-        if (document.fullscreenElement?.contains(video)) return document.fullscreenElement;
+        if (document.fullscreenElement?.contains(video)) {
+            return document.fullscreenElement === video
+                ? video.parentElement || document.body
+                : document.fullscreenElement;
+        }
         return video.closest(".videoPlayerContainer") || video.parentElement || document.body;
     }
 
@@ -132,11 +136,13 @@
         const timed = [];
         const visit = entries => {
             for (const comment of entries || []) {
-                const positionTicks = comment.PositionTicks == null ? null : Number(comment.PositionTicks);
+                const positionValue = comment.PositionTicks ?? comment.positionTicks;
+                const positionTicks = positionValue == null ? null : Number(positionValue);
                 const text = comment.Text || comment.text;
                 if (Number.isSafeInteger(positionTicks) && positionTicks >= 0 && text) {
+                    const id = comment.Id ?? comment.id ?? `${positionTicks}:${text}`;
                     timed.push({
-                        id: String(comment.Id || comment.id),
+                        id: String(id),
                         positionTicks,
                         userName: comment.UserName || comment.userName || "Unbekannt",
                         text
@@ -202,7 +208,7 @@
             return;
         }
 
-        const jumpedForward = currentTime - previousPlaybackTime > 3;
+        const jumpedForward = currentTime - previousPlaybackTime > 1.5;
         if (jumpedForward) {
             for (const comment of timedPlaybackComments) {
                 if (comment.positionTicks / 10000000 < currentTime - TIMED_COMMENT_SEEK_TOLERANCE_SECONDS) {
